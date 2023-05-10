@@ -5,7 +5,10 @@ VERSION := 1.0.0
 BUILD_TIME := $(shell date +%FT%T%z)
 LDFLAGS := -ldflags "-X main.version=$(VERSION) -X main.buildTime=$(BUILD_TIME)"
 
-.PHONY: build clean
+.PHONY: build clean dev
+
+dev: 
+	go run main.go
 
 build: build-darwin-amd64
 
