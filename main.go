@@ -53,7 +53,6 @@ func playWhenPercentageOutsideRange(minPercentage, maxPercentage int, sound stri
 		percentage := batteryInfo.Percentage
 		isDischarging := batteryInfo.State == "Discharging"
 		isCharging := batteryInfo.State == "Charging"
-
 		if (isDischarging && percentage <= minPercentage) || (isCharging && percentage >= maxPercentage) {
 			playSound(sound, percentage, isCharging)
 			// Wait 10 seconds, and play sound again
@@ -65,15 +64,16 @@ func playWhenPercentageOutsideRange(minPercentage, maxPercentage int, sound stri
 }
 
 func main() {
-	log.Println("Battery Reminder Started.")
-
 	// Define command-line flags for minimum and maximum battery percentage, and sound file path.
 	minPercentage := flag.Int("min", 20, "Minimum battery percentage")
 	maxPercentage := flag.Int("max", 80, "Maximum battery percentage")
 	sound := flag.String("sound", "", "Sound to play, for example: /System/Library/Sounds/Ping.aiff")
-
 	// Parse the command-line flags.
 	flag.Parse()
+
+	message := fmt.Sprintf("Battery Reminder Started. \nMinimum: %v \nMaximum: %v", *minPercentage, *maxPercentage)
+	log.Println(message)
+	notification(message)
 
 	for {
 		// Play sound when the battery percentage is outside the specified range.
@@ -110,7 +110,11 @@ func main() {
 // unmute sets the system volume to maximum.
 func unmute() {
 	cmd := exec.Command("osascript", "-e", "set volume output volume 100")
-	cmd.Run()
+	err := cmd.Run()
+
+	if err != nil {
+		log.Printf("Failed to unmute: %v", err)
+	}
 }
 
 // playSound plays the specified sound file.
@@ -137,5 +141,27 @@ func speak(percentage int, isCharging bool) {
 		message = fmt.Sprintf("Battery is %d%% charged. Please unplug your charger.", percentage)
 	}
 
-	exec.Command("say", message).Run()
+	// First notify
+	notification(message)
+	time.Sleep(2 * time.Second)
+
+	cmd := exec.Command("say", message)
+	err := cmd.Run()
+
+	if err != nil {
+		log.Printf("Failed to speak: %v", err)
+	}
+}
+
+func notification(message string) {
+	// Define the AppleScript command for displaying a notification without an icon
+	script := fmt.Sprintf(`display notification "%v" with title "%v" sound name "default"`, message, "Battery Reminder")
+
+	// Execute the AppleScript command using the `osascript` utility
+	cmd := exec.Command("osascript", "-e", script)
+	err := cmd.Run()
+
+	if err != nil {
+		log.Printf("Failed to send notification: %v", err)
+	}
 }

@@ -2,8 +2,6 @@
 
 # Set variables
 BATTERY_REMINDER="battery-reminder"
-LAUNCH_AGENT_FILE="com.user.$BATTERY_REMINDER.plist"
-LAUNCH_AGENT_PATH="$HOME/Library/LaunchAgents/$LAUNCH_AGENT_FILE"
 COMMAND="$1"
 MIN="$2"
 MAX="$3"
@@ -20,7 +18,7 @@ start_battery_reminder() {
   if is_battery_reminder_running; then
     echo "Battery Reminder is already running."
   else
-    nohup ./build/"$BATTERY_REMINDER" --min "$MIN" --max "$MAX" > "$BATTERY_REMINDER".log 2>&1 &
+    nohup "$PWD"/build/"$BATTERY_REMINDER" --min "$MIN" --max "$MAX" >"$BATTERY_REMINDER".log 2>&1 &
     echo "Battery Reminder started."
   fi
 }
@@ -35,46 +33,43 @@ stop_battery_reminder() {
   fi
 }
 
-# Create the LaunchAgent plist file
-create_launch_agent_plist() {
-  cat <<EOT >"$LAUNCH_AGENT_PATH"
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key>
-  <string>$LAUNCH_AGENT_FILE</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>$(pwd)/build/$BATTERY_REMINDER</string>
-    <string>--min</string>
-    <string>"$MIN"</string>
-    <string>--max</string>
-    <string>"$MAX"</string>
-  </array>
-  <key>RunAtLoad</key>
-  <true/>
-</dict>
-</plist>
-EOT
+remove_from_zshrc() {
+  # Remove existing lines between <Battery Reminder> and </Battery Reminder>
+  sed -i '' '/# <Battery Reminder>/,/# <\/Battery Reminder>/d' ~/.zshrc
 }
 
-# Load the LaunchAgent plist file
-load_launch_agent_plist() {
-  launchctl load "$LAUNCH_AGENT_PATH"
+add_battery_reminder_to_zshrc() {
+  local B_MIN="$1"
+  local B_MAX="$2"
+
+  local COMMAND=$(
+    cat <<EOF
+
+# <Battery Reminder>
+BATTERY_REMINDER="$BATTERY_REMINDER"
+B_APP_ROOT="$PWD"
+B_MIN="$B_MIN"
+B_MAX="$B_MAX"
+if ! pgrep -f "$BATTERY_REMINDER" >/dev/null; then
+  nohup "\$B_APP_ROOT/build/\$BATTERY_REMINDER" --min "\$B_MIN" --max "\$B_MAX" >"\$B_APP_ROOT/\$BATTERY_REMINDER.log" 2>&1 &
+fi
+# </Battery Reminder>
+EOF
+  )
+
+  # Remove
+  remove_from_zshrc
+  # Append the updated command to .zshrc
+  echo "$COMMAND" >>~/.zshrc
 }
 
 # Determine the command
 case "$COMMAND" in
 "stop")
   stop_battery_reminder
+  remove_from_zshrc
   ;;
 *)
-  # Delete existing files if they exist
-  if [[ -f "$LAUNCH_AGENT_PATH" ]]; then
-    launchctl unload "$LAUNCH_AGENT_PATH"
-    rm "$LAUNCH_AGENT_PATH"
-  fi
 
   # Set defaults for min and max
   if [[ -z "$MIN" ]]; then
@@ -84,12 +79,6 @@ case "$COMMAND" in
     MAX=$DEFAULT_MAX
   fi
 
-  # Create the LaunchAgent plist file
-  create_launch_agent_plist
-
-  # Load the LaunchAgent plist file
-  load_launch_agent_plist
-
   # Stop the program if it is already running
   if is_battery_reminder_running; then
     stop_battery_reminder
@@ -98,8 +87,9 @@ case "$COMMAND" in
   # Start the program
   start_battery_reminder
 
+  # add_battery_reminder_to_zshrc
+  add_battery_reminder_to_zshrc $MIN $MAX
+
   echo "Installation complete. Battery Reminder will now run at startup with min=$MIN and max=$MAX."
   ;;
 esac
-
-# ./setup.sh start 20 80
